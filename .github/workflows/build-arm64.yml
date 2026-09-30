@@ -1,0 +1,61 @@
+name: Build ARM64 Linux Deb
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+        with:
+          ref: 'dev_v1.11.7'
+          submodules: recursive
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          architecture: 'arm64'
+
+      - name: Build Linux App
+        run: |
+          cd simple_live_app
+          flutter pub get
+          flutter build linux --release
+
+      - name: Create Deb Package
+        run: |
+          cd simple_live_app/build/linux/arm64/release
+          mkdir -p deb/opt/simple-live deb/usr/share/applications deb/DEBIAN
+          cp -r bundle/* deb/opt/simple-live/
+          cat << 'EOF' > deb/DEBIAN/control
+          Package: com.simplelive.app
+          Version: 1.11.7
+          Section: video
+          Priority: optional
+          Architecture: arm64
+          Depends: libgtk-3-0, libmpv1 | libmpv2
+          Description: Simple Live for ARM64 Linux
+          EOF
+          cat << 'EOF' > deb/usr/share/applications/simple-live.desktop
+          [Desktop Entry]
+          Name=Simple Live
+          Exec=/opt/simple-live/simple_live_app
+          Type=Application
+          Categories=AudioVideo;
+          Terminal=false
+          EOF
+          dpkg-deb --build deb simple-live_1.11.7_arm64.deb
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: simple-live-arm64-deb
+          path: simple_live_app/build/linux/arm64/release/simple-live_1.11.7_arm64.deb
