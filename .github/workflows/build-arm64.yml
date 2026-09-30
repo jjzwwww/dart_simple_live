@@ -17,13 +17,21 @@ jobs:
       - name: Install System Dependencies
         run: |
           sudo apt update
-          sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libmpv-dev
+          sudo apt install -y curl git unzip xz-utils zip clang cmake ninja-build pkg-config \
+              libgtk-3-dev liblzma-dev libmpv-dev
 
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: 'stable'
-          architecture: 'arm64'
+      - name: Install Flutter (ARM64 Native)
+        run: |
+          # 直接浅克隆 stable 分支到临时目录
+          git clone --depth 1 --branch stable https://github.com/flutter/flutter.git $RUNNER_TEMP/flutter
+          # 将 Flutter 添加到系统路径
+          echo "\(RUNNER_TEMP/flutter/bin" >>\)GITHUB_PATH
+
+      - name: Setup & Verify Flutter
+        run: |
+          flutter config --no-analytics
+          flutter config --enable-linux-desktop
+          flutter doctor -v
 
       - name: Build Linux App
         run: |
@@ -36,6 +44,8 @@ jobs:
           cd simple_live_app/build/linux/arm64/release
           mkdir -p deb/opt/simple-live deb/usr/share/applications deb/DEBIAN
           cp -r bundle/* deb/opt/simple-live/
+          
+          # 创建 control 文件
           cat << 'EOF' > deb/DEBIAN/control
           Package: com.simplelive.app
           Version: 1.11.7
@@ -43,16 +53,20 @@ jobs:
           Priority: optional
           Architecture: arm64
           Depends: libgtk-3-0, libmpv1 | libmpv2
-          Description: Simple Live for ARM64 Linux
+          Description: Simple Live client for ARM64 UOS
           EOF
+
+          # 创建 desktop 文件
           cat << 'EOF' > deb/usr/share/applications/simple-live.desktop
           [Desktop Entry]
           Name=Simple Live
           Exec=/opt/simple-live/simple_live_app
           Type=Application
-          Categories=AudioVideo;
+          Categories=AudioVideo;Player;
           Terminal=false
           EOF
+
+          # 构建 deb 安装包
           dpkg-deb --build deb simple-live_1.11.7_arm64.deb
 
       - name: Upload Artifact
